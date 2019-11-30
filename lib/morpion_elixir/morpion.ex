@@ -1,5 +1,6 @@
 defmodule MorpionElixir.Morpion do
   use GenServer
+  use Bitwise
   alias __MODULE__
   alias MorpionElixer.Move
 
@@ -9,8 +10,15 @@ defmodule MorpionElixir.Morpion do
 
   def start_link(_) do
     board = generate_initial_board()
-    # IO.inspect(board, label: "karen")
-    print_board(board)
+
+    # print_board(board)
+    move = List.first(initial_moves())
+    # {board, _taken_moves, _possible_moves} = make_move(board, [], [], move)
+
+    # print_board(board)
+
+    # IO.inspect(is_move_valid(board, move))
+    # IO.inspect(Enum.map(initial_moves(), fn move -> is_move_valid(board, move) end))
 
     GenServer.start_link(Morpion, {0}, name: Morpion)
   end
@@ -68,10 +76,19 @@ defmodule MorpionElixir.Morpion do
     1
   end
 
+  defp mask_direction(direction) do
+    case direction do
+      0 -> 2
+      1 -> 4
+      2 -> 8
+      3 -> 16
+    end
+  end
+
   defp generate_initial_board do
     initial_moves()
     |> Enum.flat_map(fn move ->
-      Enum.map(0..3, fn offset ->
+      Enum.map(0..4, fn offset ->
         {move, offset}
       end)
     end)
@@ -90,6 +107,54 @@ defmodule MorpionElixir.Morpion do
       {board_index_at(x, y), mask_x()}
     end)
     |> Enum.into(%{})
+  end
+
+  defp make_move(board, taken_moves, possible_moves, move) do
+    # not done
+    {board, taken_moves ++ [move], possible_moves}
+  end
+
+  defp is_empty_at(board, x, y) do
+    is_nil(get_in(board, [board_index_at(x, y)]))
+  end
+
+  defp is_direction_taken(board, x, y, direction) do
+    c =
+      case get_in(board, [board_index_at(x, y)]) do
+        nil -> 0
+        result -> result
+      end
+
+    # IO.puts("c:#{c}  direction:#{direction}   res:#{c &&& direction}")
+
+    (c &&& mask_direction(direction)) != 0
+  end
+
+  defp is_move_valid(board, {move_x, move_y, move_direction, move_start_offset}) do
+    {delta_x, delta_y} = Enum.at(direction_offsets(), move_direction)
+
+    available_locations =
+      Enum.map(0..4, fn offset ->
+        combined_offset = offset + move_start_offset
+        x = move_x + delta_x * combined_offset
+        y = move_y + delta_y * combined_offset
+
+        # IO.puts(
+        #   "checking #{x}, #{y}   #{is_empty_at(board, x, y)}   #{
+        #     is_direction_taken(board, x, y, move_direction)
+        #   }"
+        # )
+
+        cond do
+          is_empty_at(board, x, y) -> true
+          offset > 0 && offset < 4 && is_direction_taken(board, x, y, move_direction) -> true
+          true -> false
+        end
+      end)
+      |> Enum.filter(& &1)
+      |> length
+
+    available_locations == 1
   end
 
   defp print_board(board) do
